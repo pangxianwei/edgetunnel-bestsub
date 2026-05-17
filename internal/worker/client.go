@@ -90,3 +90,25 @@ func (c *Client) PushADD(ctx context.Context, body string) error {
 	}
 	return nil
 }
+
+func (c *Client) PushProxyIP(ctx context.Context, body string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/admin/PROXYIP.txt", strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=UTF-8")
+	req.Header.Set("User-Agent", c.userAgent)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("push proxyip returned %s: %s", resp.Status, strings.TrimSpace(string(responseBody)))
+	}
+	if !strings.Contains(string(responseBody), "success") {
+		return fmt.Errorf("push proxyip did not return success: %s", strings.TrimSpace(string(responseBody)))
+	}
+	return nil
+}

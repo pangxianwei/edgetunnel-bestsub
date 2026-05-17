@@ -72,6 +72,7 @@ h1 {
 .actions {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 20px;
 }
 
@@ -117,6 +118,43 @@ button:disabled {
 
 .hidden {
   display: none !important;
+}
+
+.proxyip-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid rgba(0, 113, 227, 0.16);
+  border-radius: var(--radius-md);
+  background: rgba(0, 113, 227, 0.04);
+  color: var(--text-primary);
+}
+
+.proxyip-summary.muted {
+  color: var(--text-secondary);
+  background: #f5f5f7;
+  border-color: var(--border-color);
+}
+
+.proxyip-count {
+  font-weight: 650;
+  color: var(--accent-blue);
+}
+
+.proxyip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.proxyip-list code {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid var(--border-color);
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
 /* Panel System */

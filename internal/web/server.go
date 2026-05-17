@@ -55,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/preflight", s.handlePreflight)
 	mux.HandleFunc("/api/probe/run", s.handleRun)
 	mux.HandleFunc("/api/worker/push", s.handlePush)
+	mux.HandleFunc("/api/worker/proxyip", s.handleProxyIPPush)
 	mux.HandleFunc("/api/clash/generate", s.handleClashGenerate)
 	mux.HandleFunc("/api/clash/local.yaml", s.handleClashYAML)
 	mux.HandleFunc("/", s.handleIndex)
@@ -214,6 +215,53 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	writeJSON(w, map[string]any{"success": true})
+}
+
+func (s *Server) handleProxyIPPush(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		http.Error(w, "probe is currently running", http.StatusConflict)
+		return
+	}
+	if s.last == nil || strings.TrimSpace(s.last.AutoProxyIPs) == "" {
+		s.mu.Unlock()
+		http.Error(w, "no auto proxyip result to push", http.StatusBadRequest)
+		return
+	}
+	if s.cfg.Worker.Password == "" {
+		s.mu.Unlock()
+		http.Error(w, "未配置 Worker 密码，请在配置文件中填写 worker.password", http.StatusBadRequest)
+		return
+	}
+	proxyIPs := strings.TrimSpace(s.last.AutoProxyIPs)
+	s.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(r.Context(), 1*time.Minute)
+	defer cancel()
+
+	client, err := worker.New(s.cfg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := client.Login(ctx); err != nil {
+		http.Error(w, "login: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if err := client.PushProxyIP(ctx, proxyIPs); err != nil {
+		http.Error(w, "push proxyip: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"success":  true,
+		"proxy_ip": proxyIPs,
+	})
 }
 
 func (s *Server) handleClashGenerate(w http.ResponseWriter, r *http.Request) {

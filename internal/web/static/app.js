@@ -3,6 +3,7 @@ const resultRows = document.querySelector("#resultRows");
 const runBtn = document.querySelector("#runBtn");
 const clashBtn = document.querySelector("#clashBtn");
 const pushBtn = document.querySelector("#pushBtn");
+const proxyPushBtn = document.querySelector("#proxyPushBtn");
 const checkBtn = document.querySelector("#checkBtn");
 const envSummary = document.querySelector("#envSummary");
 const envChecks = document.querySelector("#envChecks");
@@ -12,6 +13,7 @@ const clearCountryBtn = document.querySelector("#clearCountryBtn");
 const modeToggle = document.querySelector("#modeToggle");
 const loadingOverlay = document.querySelector("#loadingOverlay");
 const loadingText = document.querySelector("#loadingText");
+const proxyipSummary = document.querySelector("#proxyipSummary");
 
 const progressContainer = document.querySelector("#progressContainer");
 const progressBarFill = document.querySelector("#progressBarFill");
@@ -28,6 +30,7 @@ let lastPreflight = null;
 let progressInterval = null;
 let simulatedProgress = 0;
 let clashReady = false;
+let latestAutoProxyIPs = "";
 
 function getFlagEmoji(countryCode) {
   if (!countryCode || countryCode.length !== 2) return "";
@@ -136,10 +139,14 @@ async function refresh() {
   runBtn.disabled = status.running;
   clashBtn.disabled = status.running || !status.has_result || !clashReady;
   pushBtn.disabled = status.running || !status.has_result;
+  proxyPushBtn.disabled = status.running || !latestAutoProxyIPs;
   setLoading(status.running, status.last_error, status.has_result, status);
 
   if (status.has_result) {
     const latest = await getJSON("/api/results/latest");
+    latestAutoProxyIPs = latest.auto_proxy_ips || "";
+    proxyPushBtn.disabled = status.running || !latestAutoProxyIPs;
+    renderProxyIPSummary(latestAutoProxyIPs);
     if (latest.top.length === 0 && status.last_success > 0) {
       // Logic for filtered out but found IPs
       progressStatus.textContent = `找到了 ${status.last_success} 个有效 IP，但都不符合国家筛选条件。`;
@@ -156,6 +163,20 @@ async function refresh() {
       </tr>
     `).join("");
   }
+}
+
+function renderProxyIPSummary(value) {
+  if (!value) {
+    proxyipSummary.className = "proxyip-summary muted";
+    proxyipSummary.textContent = "暂无自动反代结果。完成测速并启用 proxyip_auto 后，这里会显示可推送的 PROXYIP。";
+    return;
+  }
+  const items = value.split(",").map(item => item.trim()).filter(Boolean);
+  proxyipSummary.className = "proxyip-summary";
+  proxyipSummary.innerHTML = `
+    <div class="proxyip-count">已筛出 ${items.length} 个 PROXYIP</div>
+    <div class="proxyip-list">${items.map(item => `<code>${escapeHTML(item)}</code>`).join("")}</div>
+  `;
 }
 
 async function start() {
@@ -200,6 +221,20 @@ async function push() {
     }
   } catch (err) {
     showAlert("同步失败: " + err.message, "错误", "error");
+  } finally {
+    await refresh();
+  }
+}
+
+async function pushProxyIP() {
+  proxyPushBtn.disabled = true;
+  try {
+    const result = await getJSON("/api/worker/proxyip", { method: "POST" });
+    if (result.success) {
+      showAlert(`PROXYIP 已推送到 Worker：${result.proxy_ip}`, "推送成功", "success");
+    }
+  } catch (err) {
+    showAlert("PROXYIP 推送失败: " + err.message, "错误", "error");
   } finally {
     await refresh();
   }
@@ -352,6 +387,7 @@ function severityLabel(severity) {
 runBtn.addEventListener("click", () => start().catch(err => showAlert(err.message, "执行失败", "error")));
 clashBtn.addEventListener("click", () => generateClash().catch(err => showAlert(err.message, "执行失败", "error")));
 pushBtn.addEventListener("click", () => push().catch(err => showAlert(err.message, "执行失败", "error")));
+proxyPushBtn.addEventListener("click", () => pushProxyIP().catch(err => showAlert(err.message, "执行失败", "error")));
 checkBtn.addEventListener("click", () => checkEnvironment().catch(err => showAlert(err.message, "检测失败", "error")));
 clearCountryBtn.addEventListener("click", () => {
   for (const button of countrySelect.querySelectorAll(".country-chip.selected")) {

@@ -1,4 +1,4 @@
-module github.com/pangxianwei/edgetunnel-bestsub
+module github.com/grootpxw/edgetunnel-bestsub
 
 go 1.25.0
 

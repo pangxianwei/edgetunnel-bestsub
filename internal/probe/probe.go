@@ -17,8 +17,8 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/config"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/source"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/config"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/source"
 )
 
 type Result struct {

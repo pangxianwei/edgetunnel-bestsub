@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/app"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/config"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/web"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/app"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/config"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/web"
 )
 
 func main() {

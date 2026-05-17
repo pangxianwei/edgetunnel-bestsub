@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/config"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/probe"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/config"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/probe"
 	"gopkg.in/yaml.v3"
 )
 

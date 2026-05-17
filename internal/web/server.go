@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/app"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/clash"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/config"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/preflight"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/probe"
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/worker"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/app"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/clash"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/config"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/preflight"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/probe"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/worker"
 )
 
 func init() {

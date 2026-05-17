@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pangxianwei/edgetunnel-bestsub/internal/config"
+	"github.com/grootpxw/edgetunnel-bestsub/internal/config"
 )
 
 type Client struct {

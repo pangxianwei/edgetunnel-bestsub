@@ -42,6 +42,8 @@ type Options struct {
 	WorkerBaseURL     string
 	WorkerPassword    string
 	UserAgent         string
+	// WorkerHTTPClient 如果不为 nil，则复用该已登录的 client，跳过内部登录。
+	WorkerHTTPClient  *http.Client
 }
 
 type WorkerVerifyOptions struct {
@@ -244,19 +246,27 @@ func filterWorkerExitCountry(ctx context.Context, opts Options, results []ProxyI
 	if opts.WorkerBaseURL == "" {
 		return nil, fmt.Errorf("worker.base_url is required when worker_verify.enabled is true")
 	}
-	if opts.WorkerPassword == "" {
-		return nil, fmt.Errorf("worker.password is required when worker_verify.enabled is true")
-	}
 	limit := opts.WorkerVerify.MaxChecks
 	if limit <= 0 || limit > len(results) {
 		limit = len(results)
 	}
-	client, err := newWorkerHTTPClient(opts)
-	if err != nil {
-		return nil, err
-	}
-	if err := workerLogin(ctx, client, opts); err != nil {
-		return nil, err
+
+	var client *http.Client
+	if opts.WorkerHTTPClient != nil {
+		// 复用外部已登录的 client
+		client = opts.WorkerHTTPClient
+	} else {
+		if opts.WorkerPassword == "" {
+			return nil, fmt.Errorf("worker.password is required when worker_verify.enabled is true")
+		}
+		c, err := newWorkerHTTPClient(opts)
+		if err != nil {
+			return nil, err
+		}
+		if err := workerLogin(ctx, c, opts); err != nil {
+			return nil, err
+		}
+		client = c
 	}
 
 	out := make([]ProxyIPResult, 0, opts.Limit)
@@ -316,7 +326,7 @@ func workerLogin(ctx context.Context, client *http.Client, opts Options) error {
 		return fmt.Errorf("login returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	if !strings.Contains(string(body), "success") {
-		return fmt.Errorf("login did not return success: %s", strings.TrimSpace(string(body)))
+		return fmt.Errorf("Worker 登录失败（密码可能错误），响应不含 success 标记")
 	}
 	return nil
 }

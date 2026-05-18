@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,6 +42,23 @@ func RunOnceMode(ctx context.Context, cfg config.Config, push bool, mode string)
 	cfg = applyMode(cfg, mode)
 	start := time.Now()
 	run := RunResult{StartedAt: start, Mode: mode}
+
+	// 测速前预检 Worker 登录，避免测完才发现密码错误
+	// 只要配置了密码就验证
+	needWorker := cfg.Worker.Password != ""
+	var workerClient *worker.Client
+	if needWorker {
+		c, err := worker.New(cfg)
+		if err != nil {
+			return RunResult{}, fmt.Errorf("Worker 连接失败: %w", err)
+		}
+		if err := c.Login(ctx); err != nil {
+			return RunResult{}, fmt.Errorf("login: %w", err)
+		}
+		log.Printf("[preflight] Worker 登录验证通过")
+		workerClient = c
+	}
+
 	if cfg.Probe.Preflight.Enabled {
 		report := preflight.Run(ctx, cfg)
 		run.Preflight = &report
@@ -65,7 +83,7 @@ func RunOnceMode(ctx context.Context, cfg config.Config, push bool, mode string)
 	}
 
 	if cfg.Clash.AutoProxyIP.Enabled {
-		fetchedIPs, err := proxyip.FetchAndCheck(ctx, proxyip.Options{
+		fetchOpts := proxyip.Options{
 			Country:           cfg.Clash.AutoProxyIP.Country,
 			Limit:             cfg.Clash.AutoProxyIP.Limit,
 			SourceURL:         cfg.Clash.AutoProxyIP.SourceURL,
@@ -79,9 +97,15 @@ func RunOnceMode(ctx context.Context, cfg config.Config, push bool, mode string)
 			WorkerBaseURL:  cfg.Worker.BaseURL,
 			WorkerPassword: cfg.Worker.Password,
 			UserAgent:      cfg.Worker.UserAgent,
-		})
+		}
+		if workerClient != nil {
+			fetchOpts.WorkerHTTPClient = workerClient.HTTPClient()
+		}
+		fetchedIPs, err := proxyip.FetchAndCheck(ctx, fetchOpts)
 		if err == nil && len(fetchedIPs) > 0 {
 			run.AutoProxyIPs = strings.Join(fetchedIPs, ",")
+		} else if err != nil {
+			log.Printf("[proxyip_auto] 自动反代 IP 获取失败: %v", err)
 		}
 	}
 
@@ -93,16 +117,7 @@ func RunOnceMode(ctx context.Context, cfg config.Config, push bool, mode string)
 	run.OutputPath = cfg.Output.Path
 
 	if push && !cfg.Output.DryRun {
-		client, err := worker.New(cfg)
-		if err != nil {
-			run.PushError = err.Error()
-			return run, nil
-		}
-		if err := client.Login(ctx); err != nil {
-			run.PushError = err.Error()
-			return run, nil
-		}
-		if err := client.PushADD(ctx, addText); err != nil {
+		if err := workerClient.PushADD(ctx, addText); err != nil {
 			run.PushError = err.Error()
 			return run, nil
 		}

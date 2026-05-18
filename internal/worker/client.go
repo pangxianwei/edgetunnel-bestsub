@@ -64,7 +64,7 @@ func (c *Client) Login(ctx context.Context) error {
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	if !strings.Contains(string(body), "success") {
-		return fmt.Errorf("login did not return success")
+		return fmt.Errorf("Worker 登录失败（密码可能错误）")
 	}
 	return nil
 }
@@ -89,6 +89,16 @@ func (c *Client) PushADD(ctx context.Context, body string) error {
 		return fmt.Errorf("push did not return success: %s", strings.TrimSpace(string(responseBody)))
 	}
 	return nil
+}
+
+// HTTPClient 返回内部已登录的 http.Client（带 cookie），供其他模块复用会话。
+func (c *Client) HTTPClient() *http.Client {
+	return c.http
+}
+
+// BaseURL 返回 Worker 的基础 URL。
+func (c *Client) BaseURL() string {
+	return c.baseURL
 }
 
 func (c *Client) PushProxyIP(ctx context.Context, body string) error {

@@ -167,7 +167,9 @@ output:
 clash:
     # Clash Verge Rev 的 profiles 目录路径
     # 留空时前端"生成本地 Clash 配置"按钮会禁用
-    # Windows 示例: "C:\\Users\\你的用户名\\AppData\\Roaming\\io.github.clash-verge-rev.clash-verge-rev\\"
+    # ⚠️ 注意：YAML 双引号中反斜杠 \ 会被当作转义符（如 \U 会报错 "did not find expected hexdecimal number"）
+    #    请使用正斜杠 / 代替，Go 在 Windows 上两种斜杠都能识别。
+    # Windows 示例: "C:/Users/你的用户名/AppData/Roaming/io.github.clash-verge-rev.clash-verge-rev/"
     local_profile_dir: ""
     # 写入 profiles 目录的文件名
     # 默认值: "bestsub-local.yaml"

@@ -281,6 +281,9 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			s.lastError = err.Error()
 		} else {
+			if result.AutoProxyIPs == "" && s.last != nil {
+				result.AutoProxyIPs = s.last.AutoProxyIPs
+			}
 			s.last = &result
 			if result.AutoProxyIPs != "" {
 				s.saveProxyIPToDisk(result.AutoProxyIPs)

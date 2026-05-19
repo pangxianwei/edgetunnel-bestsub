@@ -82,35 +82,6 @@ func RunOnceMode(ctx context.Context, cfg config.Config, push bool, mode string)
 		return RunResult{}, err
 	}
 
-	if cfg.Clash.AutoProxyIP.Enabled {
-		fetchOpts := proxyip.Options{
-			Country:           cfg.Clash.AutoProxyIP.Country,
-			Limit:             cfg.Clash.AutoProxyIP.Limit,
-			SourceURL:         cfg.Clash.AutoProxyIP.SourceURL,
-			CheckAPI:          cfg.Clash.AutoProxyIP.CheckAPI,
-			Concurrency:       cfg.Clash.AutoProxyIP.Concurrency,
-			RequireGeoIPMatch: cfg.Clash.AutoProxyIP.RequireGeoIPMatch,
-			GeoIPDBPath:       cfg.Clash.AutoProxyIP.GeoIPDBPath,
-			WorkerVerify: proxyip.WorkerVerifyOptions{
-				Enabled:   cfg.Clash.AutoProxyIP.WorkerVerify.Enabled,
-				URL:       cfg.Clash.AutoProxyIP.WorkerVerify.URL,
-				MaxChecks: cfg.Clash.AutoProxyIP.WorkerVerify.MaxChecks,
-			},
-			WorkerBaseURL:  cfg.Worker.BaseURL,
-			WorkerPassword: cfg.Worker.Password,
-			UserAgent:      cfg.Worker.UserAgent,
-		}
-		if workerClient != nil {
-			fetchOpts.WorkerHTTPClient = workerClient.HTTPClient()
-		}
-		fetchedIPs, err := proxyip.FetchAndCheck(ctx, fetchOpts)
-		if err == nil && len(fetchedIPs) > 0 {
-			run.AutoProxyIPs = strings.Join(fetchedIPs, ",")
-		} else if err != nil {
-			log.Printf("[proxyip_auto] 自动反代 IP 获取失败: %v", err)
-		}
-	}
-
 	run.FinishedAt = time.Now()
 	run.Candidates = len(candidates)
 	run.Results = results
@@ -150,6 +121,7 @@ func FetchProxyIPOnly(ctx context.Context, cfg config.Config) (string, error) {
 	fetchOpts := proxyip.Options{
 		Country:           cfg.Clash.AutoProxyIP.Country,
 		Limit:             cfg.Clash.AutoProxyIP.Limit,
+		MaxCandidates:     cfg.Clash.AutoProxyIP.MaxCandidates,
 		SourceURL:         cfg.Clash.AutoProxyIP.SourceURL,
 		CheckAPI:          cfg.Clash.AutoProxyIP.CheckAPI,
 		Concurrency:       cfg.Clash.AutoProxyIP.Concurrency,

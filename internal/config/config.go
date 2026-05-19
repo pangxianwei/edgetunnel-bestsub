@@ -78,6 +78,7 @@ type AutoProxyIPConfig struct {
 	Enabled           bool                    `yaml:"enabled" json:"enabled"`
 	Country           string                  `yaml:"country" json:"country"`
 	Limit             int                     `yaml:"limit" json:"limit"`
+	MaxCandidates     int                     `yaml:"max_candidates" json:"max_candidates"`
 	SourceURL         string                  `yaml:"source_url" json:"source_url"`
 	CheckAPI          string                  `yaml:"check_api" json:"check_api"`
 	Concurrency       int                     `yaml:"concurrency" json:"concurrency"`
@@ -231,6 +232,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.Clash.AutoProxyIP.Limit <= 0 {
 		c.Clash.AutoProxyIP.Limit = 8
+	}
+	if c.Clash.AutoProxyIP.MaxCandidates <= 0 {
+		c.Clash.AutoProxyIP.MaxCandidates = 50
 	}
 	if c.Clash.AutoProxyIP.SourceURL == "" {
 		c.Clash.AutoProxyIP.SourceURL = "https://zip.cm.edu.kg/all.txt"

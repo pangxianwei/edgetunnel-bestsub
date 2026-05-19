@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -35,6 +36,7 @@ type ProxyIPResult struct {
 type Options struct {
 	Country           string
 	Limit             int
+	MaxCandidates     int
 	SourceURL         string
 	CheckAPI          string
 	Concurrency       int
@@ -45,7 +47,7 @@ type Options struct {
 	WorkerPassword    string
 	UserAgent         string
 	// WorkerHTTPClient 如果不为 nil，则复用该已登录的 client，跳过内部登录。
-	WorkerHTTPClient  *http.Client
+	WorkerHTTPClient *http.Client
 }
 
 type WorkerVerifyOptions struct {
@@ -66,13 +68,16 @@ type workerProxyIPTestResponse struct {
 	Error        string `json:"error"`
 }
 
-// FetchAndCheck fetches proxy IPs, filters by country, checks latency, and returns the top limit IPs.
+// FetchAndCheck fetches proxy IPs, filters by country, verifies them, and returns up to limit IPs.
 func FetchAndCheck(ctx context.Context, opts Options) ([]string, error) {
 	if opts.Country == "" {
 		return nil, nil
 	}
 	if opts.Limit <= 0 {
 		opts.Limit = 8
+	}
+	if opts.MaxCandidates <= 0 {
+		opts.MaxCandidates = 50
 	}
 	if opts.SourceURL == "" {
 		opts.SourceURL = "https://zip.cm.edu.kg/all.txt"
@@ -82,7 +87,7 @@ func FetchAndCheck(ctx context.Context, opts Options) ([]string, error) {
 	}
 
 	country := strings.ToUpper(opts.Country)
-	log.Printf("Starting auto-fetch proxy IPs for country: %s", country)
+	log.Printf("Starting proxy IP selection for country: %s", country)
 
 	// 1. Fetch all IPs
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -126,27 +131,31 @@ func FetchAndCheck(ctx context.Context, opts Options) ([]string, error) {
 		log.Printf("GeoIP filter kept %d candidates", len(candidates))
 	}
 
-	// 4. Check latency concurrently
+	if opts.WorkerVerify.Enabled {
+		validResults, err := checkWorkerCandidates(ctx, opts, candidates, country)
+		if err != nil {
+			return nil, err
+		}
+		if len(validResults) == 0 {
+			return nil, fmt.Errorf("no valid proxy IPs after Worker exit country check")
+		}
+		sort.SliceStable(validResults, func(i, j int) bool {
+			return validResults[i].ResponseTime < validResults[j].ResponseTime
+		})
+
+		finalIPs := make([]string, 0, opts.Limit)
+		for i := 0; i < len(validResults) && i < opts.Limit; i++ {
+			finalIPs = append(finalIPs, validResults[i].IP)
+		}
+		log.Printf("Successfully fetched and checked %d proxy IPs", len(finalIPs))
+		return finalIPs, nil
+	}
+
+	// 4. Check latency concurrently through the legacy check API.
 	validResults := checkLatency(ctx, client, candidates, opts.CheckAPI, opts.Concurrency)
 
 	if len(validResults) == 0 {
 		return nil, fmt.Errorf("no valid proxy IPs after latency check")
-	}
-
-	// 5. Sort by ResponseTime ascending
-	sort.Slice(validResults, func(i, j int) bool {
-		return validResults[i].ResponseTime < validResults[j].ResponseTime
-	})
-
-	if opts.WorkerVerify.Enabled {
-		filtered, err := filterWorkerExitCountry(ctx, opts, validResults, country)
-		if err != nil {
-			return nil, err
-		}
-		validResults = filtered
-		if len(validResults) == 0 {
-			return nil, fmt.Errorf("no valid proxy IPs after Worker exit country check")
-		}
 	}
 	sort.SliceStable(validResults, func(i, j int) bool {
 		return validResults[i].ResponseTime < validResults[j].ResponseTime
@@ -289,6 +298,162 @@ func filterGeoIPCandidates(candidates []string, dbPath string, country string) (
 		}
 	}
 	return out, nil
+}
+
+type workerCandidateCheck struct {
+	Result ProxyIPResult
+	Valid  bool
+}
+
+func checkWorkerCandidates(ctx context.Context, opts Options, candidates []string, country string) ([]ProxyIPResult, error) {
+	if opts.WorkerBaseURL == "" {
+		return nil, fmt.Errorf("worker.base_url is required when worker_verify.enabled is true")
+	}
+	if opts.Limit <= 0 {
+		opts.Limit = 8
+	}
+	if opts.MaxCandidates <= 0 {
+		opts.MaxCandidates = 50
+	}
+
+	sampled := sampleCandidates(candidates, opts.MaxCandidates)
+	if len(sampled) == 0 {
+		return nil, fmt.Errorf("no proxy IPs left after sampling")
+	}
+
+	workerCount := opts.Concurrency
+	if workerCount <= 0 {
+		workerCount = 20
+	}
+	if workerCount > len(sampled) {
+		workerCount = len(sampled)
+	}
+	log.Printf("Worker verify sampling %d/%d candidates, concurrency=%d", len(sampled), len(candidates), workerCount)
+
+	var client *http.Client
+	if opts.WorkerHTTPClient != nil {
+		client = opts.WorkerHTTPClient
+	} else {
+		if opts.WorkerPassword == "" {
+			return nil, fmt.Errorf("worker.password is required when worker_verify.enabled is true")
+		}
+		c, err := newWorkerHTTPClient(opts)
+		if err != nil {
+			return nil, err
+		}
+		if err := workerLogin(ctx, c, opts); err != nil {
+			return nil, err
+		}
+		client = c
+	}
+
+	checkCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan string)
+	results := make(chan workerCandidateCheck, len(sampled))
+
+	var wg sync.WaitGroup
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for candidate := range jobs {
+				select {
+				case <-checkCtx.Done():
+					return
+				default:
+				}
+				results <- checkWorkerCandidate(checkCtx, client, opts, candidate, country)
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, candidate := range sampled {
+			select {
+			case <-checkCtx.Done():
+				return
+			case jobs <- candidate:
+			}
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	valid := make([]ProxyIPResult, 0, opts.Limit)
+	checked := 0
+	for check := range results {
+		checked++
+		if check.Valid && len(valid) < opts.Limit {
+			valid = append(valid, check.Result)
+			log.Printf("Worker verify accepted %s (%d/%d)", check.Result.IP, len(valid), opts.Limit)
+			if len(valid) >= opts.Limit {
+				log.Printf("Worker verify early stopped: reached limit %d after checking %d/%d sampled candidates", opts.Limit, checked, len(sampled))
+				cancel()
+			}
+		}
+		if checked%10 == 0 || checked == len(sampled) || len(valid) >= opts.Limit {
+			log.Printf("Worker verify progress: checked=%d/%d valid=%d", checked, len(sampled), len(valid))
+		}
+	}
+
+	log.Printf("Worker exit country check kept %d/%d proxy IPs", len(valid), checked)
+	return valid, nil
+}
+
+func sampleCandidates(candidates []string, maxCandidates int) []string {
+	sampled := append([]string(nil), candidates...)
+	rand.Shuffle(len(sampled), func(i, j int) {
+		sampled[i], sampled[j] = sampled[j], sampled[i]
+	})
+	if maxCandidates > 0 && len(sampled) > maxCandidates {
+		sampled = sampled[:maxCandidates]
+	}
+	return sampled
+}
+
+func checkWorkerCandidate(ctx context.Context, client *http.Client, opts Options, candidate string, country string) workerCandidateCheck {
+	test, err := workerProxyIPTest(ctx, client, opts, candidate)
+	if err != nil {
+		if ctx.Err() != nil {
+			return workerCandidateCheck{}
+		}
+		log.Printf("Worker proxyip test failed for %s: %v", candidate, err)
+		return workerCandidateCheck{}
+	}
+	if !test.Success {
+		log.Printf("Worker proxyip test rejected %s: success=false error=%s", candidate, test.Error)
+		return workerCandidateCheck{}
+	}
+	if !strings.EqualFold(test.Country, country) {
+		log.Printf("Worker proxyip test rejected %s: colo country=%s, want %s", candidate, test.Country, country)
+		return workerCandidateCheck{}
+	}
+	if test.IP == "" {
+		log.Printf("Worker proxyip test rejected %s: no exit IP returned", candidate)
+		return workerCandidateCheck{}
+	}
+	exitAddr, parseErr := netip.ParseAddr(test.IP)
+	if parseErr != nil {
+		log.Printf("Worker proxyip test rejected %s: invalid exit IP %s", candidate, test.IP)
+		return workerCandidateCheck{}
+	}
+	if !verifyExitIPGeoIP(exitAddr, opts.GeoIPDBPath, country) {
+		log.Printf("Worker proxyip test rejected %s: exit IP %s not registered in %s", candidate, test.IP, country)
+		return workerCandidateCheck{}
+	}
+	return workerCandidateCheck{
+		Result: ProxyIPResult{
+			IP:           candidate,
+			ResponseTime: test.ResponseTime,
+		},
+		Valid: true,
+	}
 }
 
 func filterWorkerExitCountry(ctx context.Context, opts Options, results []ProxyIPResult, country string) ([]ProxyIPResult, error) {

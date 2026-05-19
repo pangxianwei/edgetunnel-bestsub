@@ -175,7 +175,7 @@ async function refresh() {
 function renderProxyIPSummary(value) {
   if (!value) {
     proxyipSummary.className = "proxyip-summary muted";
-    proxyipSummary.textContent = "暂无自动反代结果。完成测速并启用 proxyip_auto 后，这里会显示可推送的 PROXYIP。";
+    proxyipSummary.textContent = "暂无反代优选结果。点击优选反代 IP 后，这里会显示可推送的 PROXYIP。";
     return;
   }
   const items = value.split(",").map(item => item.trim()).filter(Boolean);
@@ -250,12 +250,12 @@ async function pushProxyIP() {
 async function fetchProxyIPOnly() {
   proxyipFetchBtn.disabled = true;
   proxyipSummary.className = "proxyip-summary muted";
-  proxyipSummary.textContent = "正在刷新反代 IP...";
+  proxyipSummary.textContent = "正在优选反代 IP...";
 
   // 先检测环境
   const report = await checkEnvironment();
   if (report.blocked) {
-    showAlert("环境检测未通过。请关闭代理后再刷新反代 IP。", "环境异常", "error");
+    showAlert("环境检测未通过。请关闭代理后再优选反代 IP。", "环境异常", "error");
     proxyipFetchBtn.disabled = false;
     await refresh();
     return;
@@ -270,16 +270,16 @@ async function fetchProxyIPOnly() {
       const status = await getJSON("/api/status");
       if (!status.running) {
         if (status.last_error) {
-          showAlert("反代 IP 刷新失败: " + status.last_error, "错误", "error");
+          showAlert("反代 IP 优选失败: " + status.last_error, "错误", "error");
         } else {
-          showAlert("反代 IP 刷新完成", "成功", "success");
+          showAlert("反代 IP 优选完成", "成功", "success");
         }
         break;
       }
       attempts++;
     }
   } catch (err) {
-    showAlert("反代 IP 刷新失败: " + err.message, "错误", "error");
+    showAlert("反代 IP 优选失败: " + err.message, "错误", "error");
   } finally {
     proxyipFetchBtn.disabled = false;
     await refresh();

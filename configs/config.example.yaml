@@ -232,10 +232,10 @@ clash:
     # 留空则不追加 proxyip 参数
     proxyip: ""
     
-    # proxyip_auto: 自动获取并测速优选反代 IP
-    # 从公共列表拉取指定国家的反代 IP，经过延迟测试后选出最优的拼接到配置中
+    # proxyip_auto: 单独优选反代 IP
+    # 从公共列表拉取指定国家的反代 IP，经过 Worker 实测后选出可用结果
     proxyip_auto:
-        # 是否启用自动反代 IP 优选
+        # 是否启用反代 IP 优选按钮
         enabled: true
         # 目标国家代码（ISO 3166-1 alpha-2，单选）
         # 例如: "JP"（日本）, "US"（美国）, "HK"（香港）, "SG"（新加坡）
@@ -244,17 +244,21 @@ clash:
         # 每个反代 IP 会生成一组独立的节点
         # 默认值: 8
         limit: 8
+        # GeoIP 过滤后最多随机抽取多少个候选交给 Worker 实测
+        # 默认值: 50
+        max_candidates: 50
         # 反代 IP 列表源 URL
         # 格式要求：每行 IP:端口#国家代码
         # 默认值: "https://zip.cm.edu.kg/all.txt"
         source_url: "https://zip.cm.edu.kg/all.txt"
-        # 延迟检测 API 地址，%s 会被替换为候选 IP
+        # 旧版延迟检测 API 地址，%s 会被替换为候选 IP
+        # worker_verify.enabled 为 true 时会直接通过 Worker 实测，不依赖此接口
         # 需要返回 JSON: {"success": true/false, "responseTime": 123}
         # 默认值: "https://api.090227.xyz/check?proxyip=%s"
         check_api: "https://api.090227.xyz/check?proxyip=%s"
-        # 延迟检测并发数量
-        # 默认值: 20
-        concurrency: 20
+        # Worker 实测并发数量
+        # 默认值: 2
+        concurrency: 2
         # 是否要求反代 IP 的 GeoIP 注册地与目标国家一致
         # 与 probe.require_geoip_match 类似，关闭可提高命中率
         require_geoip_match: false
@@ -265,11 +269,11 @@ clash:
         # 比 GeoIP 数据库更准确，但需要 Worker 支持 /admin/proxyip-test 接口
         worker_verify:
             # 是否启用 Worker 出口验证
-            enabled: false
+            enabled: true
             # Worker 验证时访问的目标 URL，用于获取出口 IP 信息
             # 默认值: "https://cloudflare.com/cdn-cgi/trace"
             url: "https://cloudflare.com/cdn-cgi/trace"
-            # 最多检查多少个候选反代 IP（避免大量请求耗时过长）
+            # 旧版最多检查多少个测速结果；新逻辑请使用 proxyip_auto.max_candidates
             # 默认值: limit * 3
             max_checks: 24
 

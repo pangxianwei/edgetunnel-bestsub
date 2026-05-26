@@ -28,19 +28,31 @@ GOARCH_NAME="$(go env GOARCH)"
 build_macos() {
   local asset_name="$1"
   local platform="$2"
+  local app_path=""
   echo "开始构建 $platform ..."
   wails build -clean -platform "$platform"
+  app_path="$(find "$ROOT_DIR/build/bin" -maxdepth 1 -type d -name '*.app' | head -n 1)"
+  if [[ -z "$app_path" ]]; then
+    echo "未找到 macOS 应用产物(.app)，请检查 Wails 构建输出。"
+    exit 1
+  fi
   rm -f "$RELEASE_DIR/$asset_name"
-  ditto -c -k --sequesterRsrc --keepParent "$ROOT_DIR/build/bin/BestSub.app" "$RELEASE_DIR/$asset_name"
+  ditto -c -k --sequesterRsrc --keepParent "$app_path" "$RELEASE_DIR/$asset_name"
   ASSETS+=("$RELEASE_DIR/$asset_name")
 }
 
 build_windows() {
   local asset_name="BestSub-windows-amd64.zip"
+  local exe_path=""
   echo "开始构建 windows/amd64 ..."
   wails build -clean -platform windows/amd64 -webview2 download
+  exe_path="$(find "$ROOT_DIR/build/bin" -maxdepth 1 -type f -name '*.exe' | head -n 1)"
+  if [[ -z "$exe_path" ]]; then
+    echo "未找到 Windows 可执行文件(.exe)，请检查 Wails 构建输出。"
+    exit 1
+  fi
   rm -f "$RELEASE_DIR/$asset_name"
-  ditto -c -k "$ROOT_DIR/build/bin/BestSub.exe" "$RELEASE_DIR/$asset_name"
+  ditto -c -k "$exe_path" "$RELEASE_DIR/$asset_name"
   ASSETS+=("$RELEASE_DIR/$asset_name")
 }
 

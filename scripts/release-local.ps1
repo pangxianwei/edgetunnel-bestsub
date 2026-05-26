@@ -29,15 +29,22 @@ if ($Goos -ne "windows" -or $Goarch -ne "amd64") {
 }
 
 $AssetName = "BestSub-windows-amd64.zip"
+$ExePath = $null
 
 Write-Host "开始构建 Windows 桌面包..."
 wails build -clean -platform windows/amd64
+
+$ExePath = Get-ChildItem (Join-Path $RootDir "build/bin") -Filter *.exe -File | Select-Object -First 1
+if (-not $ExePath) {
+    Write-Host "未找到 Windows 可执行文件(.exe)，请检查 Wails 构建输出。"
+    exit 1
+}
 
 $AssetPath = Join-Path $ReleaseDir $AssetName
 if (Test-Path $AssetPath) {
     Remove-Item $AssetPath -Force
 }
-Compress-Archive -Path (Join-Path $RootDir "build/bin/BestSub.exe") -DestinationPath $AssetPath -Force
+Compress-Archive -Path $ExePath.FullName -DestinationPath $AssetPath -Force
 
 Write-Host "构建完成: $AssetPath"
 
